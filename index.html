@@ -183,6 +183,34 @@
     /* SYNTAX HL */
     .jk{color:#7DD3FC}.js{color:#86EFAC}.jn{color:#FDE047}.jb{color:#C084FC}.jnull{color:#64748B;font-style:italic}
 
+    /* POPUP CHECKOUT SYSTEM — overlay a schermo intero con iframe verso checkout-page */
+    .popup-overlay{position:fixed;inset:0;z-index:900;background:rgba(0,0,0,.65);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;padding:20px;animation:fadeIn .2s ease}
+    .popup-window{width:100%;max-width:1000px;height:88vh;background:var(--surface);border:1.5px solid var(--border2);border-radius:var(--r);overflow:hidden;display:flex;flex-direction:column;box-shadow:0 24px 80px rgba(0,0,0,.7);animation:modalIn .22s ease}
+    .popup-header{display:flex;align-items:center;gap:10px;padding:9px 14px;background:var(--surf2);border-bottom:1px solid var(--border);flex-shrink:0}
+    .popup-header-info{flex:1;display:flex;align-items:center;gap:8px;overflow:hidden}
+    .popup-status-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+    .popup-status-dot.ok{background:var(--green);animation:blink 1.8s infinite}
+    .popup-status-dot.ko{background:var(--red)}
+    .popup-header-title{font-family:'JetBrains Mono',monospace;font-size:10.5px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .popup-header-actions{display:flex;gap:5px;flex-shrink:0}
+    .popup-btn{width:26px;height:26px;border-radius:5px;border:1px solid var(--border2);background:transparent;color:var(--muted);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:12px;transition:all .15s;line-height:1}
+    .popup-btn:hover{border-color:var(--accent-l);color:var(--accent-l)}
+    .popup-btn.close-btn:hover{border-color:var(--red);color:var(--red)}
+    .popup-body{flex:1;overflow:hidden;background:var(--code)}
+    .popup-body iframe{width:100%;height:100%;border:none;background:#fff}
+
+    /* TASKBAR — popup minimizzati in basso tipo Windows */
+    .popup-taskbar{position:fixed;bottom:0;left:0;right:0;z-index:850;display:none;gap:6px;padding:7px 16px;background:var(--surf2);border-top:1.5px solid var(--border);flex-wrap:wrap;align-items:center}
+    .popup-taskbar.visible{display:flex}
+    .taskbar-item{display:inline-flex;align-items:center;gap:7px;padding:5px 14px;border-radius:var(--rsm);background:var(--surf3);border:1px solid var(--border2);cursor:pointer;transition:all .15s;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text2);max-width:280px;user-select:none}
+    .taskbar-item:hover{border-color:var(--accent-l);color:var(--accent-l);transform:translateY(-1px)}
+    .taskbar-item .tb-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
+    .taskbar-item .tb-dot.ok{background:var(--green)}
+    .taskbar-item .tb-dot.ko{background:var(--red)}
+    .taskbar-item .tb-label{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .taskbar-item .tb-x{margin-left:6px;opacity:.4;font-size:11px;padding:1px 3px;border-radius:3px;transition:all .12s}
+    .taskbar-item .tb-x:hover{opacity:1;color:var(--red);background:rgba(239,68,68,.12)}
+
     @keyframes blink{0%,100%{opacity:1}50%{opacity:.2}}
     @keyframes spin{to{transform:rotate(360deg)}}
     @keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
@@ -383,6 +411,12 @@
     </div>
   </div>
 </div>
+
+<!-- POPUP CONTAINER — overlay checkout-page, gestiti come stack -->
+<div id="popup-container"></div>
+
+<!-- TASKBAR — popup minimizzati in basso -->
+<div class="popup-taskbar" id="popup-taskbar"></div>
 
 <script>
 /* ═══════════════════════════════════════════════════════════════════════
@@ -600,6 +634,14 @@ function checkReturn() {
   LOG.sep();
   LOG.line('→ Chiama payment/detail server-side con paymentToken per conferma definitiva.', 'warn');
   LOG.end();
+
+  // Apri popup con iframe alla checkout-page passando i params del callback
+  const popupParams = {};
+  if (sl) popupParams.a = sl;
+  if (st) popupParams.Status = st;
+  if (id) popupParams.paymentID = id;
+  if (tk) popupParams.paymentToken = tk;
+  createPopup(popupParams);
 
   window.history.replaceState({}, document.title, window.location.pathname);
 }
@@ -1096,6 +1138,127 @@ function hlJson(obj) {
       return `<span class="${c}">${m}</span>`;
     }
   );
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   POPUP CHECKOUT SYSTEM
+   Gestisce popup overlay con iframe alla checkout-page.
+   Ogni callback URL (ritorno da pagamento) apre un popup.
+   I popup possono essere minimizzati (taskbar in basso) o chiusi con X.
+   Quando ne arriva uno nuovo, quelli aperti vengono minimizzati automaticamente.
+═══════════════════════════════════════════════════════════════════════ */
+const CHECKOUT_PAGE_BASE = 'https://m2ndlab.github.io/checkout-page/';
+let _popups = [];
+let _popupCounter = 0;
+
+/**
+ * Crea un nuovo popup con iframe alla checkout-page.
+ * @param {Object} params — query params del callback (a, Status, paymentID, paymentToken)
+ */
+function createPopup(params) {
+  const id     = ++_popupCounter;
+  const status = (params.Status || params.status || '?').toUpperCase();
+  const isOk   = status === 'OK';
+  const pid    = params.paymentID || params.paymentId || '—';
+
+  // Minimizza tutti i popup attualmente aperti (solo uno visibile alla volta)
+  _popups.filter(p => p.state === 'open').forEach(p => minimizePopup(p.id));
+
+  // Costruisci URL checkout-page con i query params del callback
+  const url = new URL(CHECKOUT_PAGE_BASE);
+  Object.entries(params).forEach(([k, v]) => { if (v) url.searchParams.set(k, v); });
+
+  const popup = { id, params, status, isOk, paymentID: pid, url: url.toString(), state: 'open' };
+  _popups.push(popup);
+
+  // Crea overlay nel DOM
+  const overlay = document.createElement('div');
+  overlay.className = 'popup-overlay';
+  overlay.id = `popup-${id}`;
+  overlay.innerHTML = `
+    <div class="popup-window">
+      <div class="popup-header">
+        <div class="popup-header-info">
+          <div class="popup-status-dot ${isOk ? 'ok' : 'ko'}"></div>
+          <span class="popup-header-title">Checkout · ${status} · paymentID: ${pid}</span>
+        </div>
+        <div class="popup-header-actions">
+          <button class="popup-btn" onclick="minimizePopup(${id})" title="Minimizza">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          </button>
+          <button class="popup-btn close-btn" onclick="closePopup(${id})" title="Chiudi">✕</button>
+        </div>
+      </div>
+      <div class="popup-body">
+        <iframe src="${popup.url}" title="Checkout Result #${id}"></iframe>
+      </div>
+    </div>
+  `;
+  $('popup-container').appendChild(overlay);
+  renderTaskbar();
+
+  LOG.group(`Popup #${id} — checkout aperto (${status})`, isOk ? 'ok' : 'err');
+  LOG.kv('paymentID', pid);
+  LOG.kv('checkout URL', popup.url);
+  LOG.end();
+}
+
+/** Minimizza un popup: nasconde l'overlay e lo mostra nella taskbar */
+function minimizePopup(id) {
+  const popup = _popups.find(p => p.id === id);
+  if (!popup || popup.state !== 'open') return;
+  popup.state = 'minimized';
+  const el = $(`popup-${id}`);
+  if (el) el.style.display = 'none';
+  renderTaskbar();
+  LOG.group(`Popup #${id} minimizzato`, 'info');
+  LOG.end();
+}
+
+/** Ripristina un popup minimizzato: minimizza eventuali altri aperti, poi mostra questo */
+function restorePopup(id) {
+  const popup = _popups.find(p => p.id === id);
+  if (!popup || popup.state !== 'minimized') return;
+  // Minimizza eventuali popup aperti
+  _popups.filter(p => p.state === 'open').forEach(p => minimizePopup(p.id));
+  popup.state = 'open';
+  const el = $(`popup-${id}`);
+  if (el) el.style.display = '';
+  renderTaskbar();
+  LOG.group(`Popup #${id} ripristinato`, 'info');
+  LOG.end();
+}
+
+/** Chiude definitivamente un popup: rimuove dal DOM e dallo stack */
+function closePopup(id) {
+  const popup = _popups.find(p => p.id === id);
+  if (!popup) return;
+  popup.state = 'closed';
+  const el = $(`popup-${id}`);
+  if (el) el.remove();
+  _popups = _popups.filter(p => p.state !== 'closed');
+  renderTaskbar();
+  LOG.group(`Popup #${id} chiuso`, 'info');
+  LOG.end();
+}
+
+/** Renderizza la taskbar in basso con tutti i popup minimizzati */
+function renderTaskbar() {
+  const bar = $('popup-taskbar');
+  const minimized = _popups.filter(p => p.state === 'minimized');
+  if (!minimized.length) {
+    bar.classList.remove('visible');
+    bar.innerHTML = '';
+    return;
+  }
+  bar.classList.add('visible');
+  bar.innerHTML = minimized.map(p => `
+    <div class="taskbar-item" onclick="restorePopup(${p.id})">
+      <div class="tb-dot ${p.isOk ? 'ok' : 'ko'}"></div>
+      <span class="tb-label">${p.isOk ? '✓' : '✗'} ${p.status} · #${p.paymentID}</span>
+      <span class="tb-x" onclick="event.stopPropagation(); closePopup(${p.id})" title="Chiudi">✕</span>
+    </div>
+  `).join('');
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
