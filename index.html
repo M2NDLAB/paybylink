@@ -44,13 +44,25 @@
     /* CREDENTIALS BOX */
     .cred-box{background:var(--surface);border:1px solid var(--border);border-left:3px solid var(--orange);border-radius:var(--r);padding:16px 20px;margin-bottom:16px}
     .cred-title{font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:var(--orange);margin-bottom:12px;display:flex;align-items:center;gap:6px}
-    .cred-row{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end}
+    .cred-row{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-start}
     .cred-field{display:flex;flex-direction:column;gap:5px;flex:1;min-width:180px}
-    .cred-field label{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:.06em;text-transform:uppercase}
+    .cred-field label{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:.06em;text-transform:uppercase;display:flex;align-items:center;gap:6px}
     .cred-field input{background:var(--code);border:1px solid var(--border2);color:var(--text);border-radius:var(--rsm);padding:9px 13px;font-family:'JetBrains Mono',monospace;font-size:12px;width:100%;outline:none;transition:border-color .18s,box-shadow .18s}
     .cred-field input::placeholder{color:var(--muted);opacity:.45}
     .cred-field input:focus{border-color:var(--accent-l);box-shadow:0 0 0 3px var(--accent-g)}
     .cred-field .apikey-inp{font-size:11px}
+    /* Wrapper per API key con toggle show/hide */
+    .apikey-wrap{position:relative;display:flex;align-items:stretch}
+    .apikey-wrap input{padding-right:38px}
+    .apikey-toggle{position:absolute;right:4px;top:50%;transform:translateY(-50%);background:transparent;border:none;color:var(--muted);cursor:pointer;padding:6px;border-radius:4px;transition:color .15s;display:flex;align-items:center;justify-content:center}
+    .apikey-toggle:hover{color:var(--accent-l)}
+    /* Preview mascherata sempre visibile (inizio…fine) */
+    .apikey-preview{font-family:'JetBrains Mono',monospace;font-size:10.5px;color:var(--muted);margin-top:4px;min-height:15px;line-height:1.3;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+    .apikey-preview.filled{color:var(--text2)}
+    .apikey-preview.warn{color:var(--yellow)}
+    .apikey-preview code{background:rgba(37,99,235,.1);border:1px solid rgba(37,99,235,.25);border-radius:4px;padding:1px 7px;color:var(--accent-l);font-size:10.5px}
+    .apikey-preview .pk-prefix{color:var(--green);font-weight:600}
+    .apikey-preview .pk-warn-ic{color:var(--yellow)}
 
     /* BOXES */
     .box{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);overflow:hidden;margin-bottom:16px}
@@ -200,7 +212,7 @@
     <div class="cred-title">
       <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
       Credenziali Sandbox
-      <span class="tip" data-tip="shopLogin: identificativo merchant (es. GESPAY12345).\nSincronizzato bidirezionalmente col campo JSON.\nAPI Key: header Authorization — mai esposta nel body.\nI valori vengono mantenuti durante la sessione.">i</span>
+      <span class="tip" data-tip="shopLogin: identificativo merchant (es. GESPAY12345).&#10;Sincronizzato bidirezionalmente col campo JSON.&#10;API Key: header Authorization — formato richiesto 'apikey <valore>'.&#10;Il prefisso 'apikey ' viene aggiunto automaticamente se manca.&#10;I valori vengono mantenuti in sessionStorage durante la sessione.">i</span>
     </div>
     <div class="cred-row">
       <div class="cred-field">
@@ -208,8 +220,24 @@
         <input id="cred-shop" type="text" placeholder="GESPAY12345" autocomplete="off" oninput="onCredShopChange()"/>
       </div>
       <div class="cred-field" style="flex:2">
-        <label>API Key <span style="font-size:9px;color:var(--muted);margin-left:4px;text-transform:none;letter-spacing:0">(header Authorization)</span></label>
-        <input id="cred-apikey" type="password" class="apikey-inp" placeholder="apikey XXXXX…" autocomplete="off"/>
+        <label>
+          API Key
+          <span style="font-size:9px;color:var(--muted);margin-left:4px;text-transform:none;letter-spacing:0">(header Authorization)</span>
+        </label>
+        <div class="apikey-wrap">
+          <input id="cred-apikey" type="password" class="apikey-inp" placeholder="apikey xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" autocomplete="off" oninput="onApiKeyInput()"/>
+          <button type="button" class="apikey-toggle" id="apikey-toggle" onclick="toggleApiKeyVisibility()" title="Mostra/nascondi">
+            <!-- eye icon (default: hidden state) -->
+            <svg id="apikey-eye" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+              <circle cx="12" cy="12" r="3"/>
+            </svg>
+          </button>
+        </div>
+        <!-- Preview sempre visibile: anche con input mascherato l'utente vede inizio e fine della chiave -->
+        <div class="apikey-preview" id="apikey-preview">
+          <em style="opacity:.6">Nessuna API Key inserita</em>
+        </div>
       </div>
     </div>
   </div>
@@ -220,7 +248,7 @@
       <div class="box-label">
         <span class="box-dot"></span>
         Request Body — payment/create
-        <span class="tip" data-tip="channelType obbligatorio: LINK, QRCODE o EMAIL.\nEMAIL → buyerEmail aggiunto automaticamente se assente.\nshopTransactionID generato casualmente ad ogni reset.\nshopLogin sincronizzato con il box credenziali sopra.">i</span>
+        <span class="tip" data-tip="channelType obbligatorio: LINK, QRCODE o EMAIL.&#10;EMAIL → buyerEmail aggiunto automaticamente se assente.&#10;LINK/QRCODE → buyerEmail auto-iniettata viene rimossa.&#10;shopTransactionID generato casualmente ad ogni reset.&#10;shopLogin sincronizzato con il box credenziali sopra.">i</span>
       </div>
       <div class="box-actions">
         <button class="copybtn" id="btn-copy"   onclick="doCopyEditor(this)">copy</button>
@@ -357,9 +385,9 @@
 </div>
 
 <script>
-/* ═══════════════════════════════════════════════════════
-   STRUCTURED LOGGER
-═══════════════════════════════════════════════════════ */
+/* ═══════════════════════════════════════════════════════════════════════
+   STRUCTURED LOGGER — console groups con stile coerente
+═══════════════════════════════════════════════════════════════════════ */
 const LOG = {
   _p: '[PBL]',
   _s: {
@@ -386,47 +414,120 @@ const LOG = {
   console.log('%c╚══════════════════════════════════════════╝', 'color:#2563EB');
 })();
 
-/* ═══════════════════════════════════════════════════════
+/* ═══════════════════════════════════════════════════════════════════════
    CONSTANTS & STATE
-═══════════════════════════════════════════════════════ */
-const API_URL      = 'https://sandbox.gestpay.net/api/v1/payment/create';
+═══════════════════════════════════════════════════════════════════════ */
+const API_URL       = 'https://sandbox.gestpay.net/api/v1/payment/create';
 const DEFAULT_EMAIL = 'buyer@email.com';
+// Formato obbligatorio atteso da Fabrick/GestPay nell'header Authorization
+const APIKEY_PREFIX = 'apikey ';
 
-let _currentHref  = null;
-let _currentQrB64 = null;
+let _currentHref   = null;
+let _currentQrB64  = null;
 let _currentQrMeta = {};
 let _syncLock      = false;
 
+/*
+  _autoInjectedBuyerEmail traccia se la buyerEmail presente nel JSON è stata
+  iniettata automaticamente dalla logica EMAIL (true) o è stata scritta a mano
+  dall'utente (false/undefined). Così quando l'utente passa a LINK/QRCODE
+  rimuoviamo solo ciò che abbiamo iniettato noi, rispettando eventuali
+  override manuali.
+*/
+let _autoInjectedBuyerEmail = false;
+
 const $ = id => document.getElementById(id);
 
-/* ═══════════════════════════════════════════════════════
+/* ═══════════════════════════════════════════════════════════════════════
    UTILITIES
-═══════════════════════════════════════════════════════ */
+═══════════════════════════════════════════════════════════════════════ */
 function randomShopTxId() {
   return Date.now().toString() + Math.floor(Math.random() * 999).toString().padStart(3, '0');
 }
 
-function getShop()   { return ($('cred-shop').value   || '').trim(); }
-function getApiKey() { return ($('cred-apikey').value || '').trim(); }
-function getChannel(){
+function getShop() { return ($('cred-shop').value || '').trim(); }
+
+/**
+ * Restituisce la API key grezza come digitata dall'utente (trim basic).
+ * Per ottenere il valore normalizzato da inviare nell'header usare normalizeApiKey().
+ */
+function getApiKeyRaw() { return ($('cred-apikey').value || '').trim(); }
+
+/**
+ * Normalizza la API key garantendo il prefisso "apikey " richiesto dal backend.
+ *
+ * Fabrick/GestPay si aspetta: Authorization: apikey <UUID>
+ * Se l'utente incolla solo la UUID, il backend restituisce error.code=1171
+ * "missing authentication header" perché non riconosce lo schema auth.
+ *
+ * Logica:
+ *  - trim whitespace e rimuove eventuali virgolette accidentali
+ *  - se inizia già con "apikey " (case-insensitive) → lo normalizza a lowercase
+ *  - altrimenti antepone "apikey " + spazio
+ *  - se è vuota → restituisce '' (il chiamante decide cosa fare)
+ */
+function normalizeApiKey(raw) {
+  let v = (raw || '').trim().replace(/^["']|["']$/g, '');
+  if (!v) return '';
+  // regex: "apikey" seguito da uno o più spazi (tollerante)
+  const m = v.match(/^apikey\s+(.+)$/i);
+  if (m) return APIKEY_PREFIX + m[1].trim();
+  return APIKEY_PREFIX + v;
+}
+
+/**
+ * Costruisce la preview mascherata per mostrare inizio e fine della chiave
+ * all'utente anche quando il campo input è di tipo password.
+ *
+ * Mostra sempre il prefisso "apikey " in verde (se presente/aggiunto),
+ * poi i primi N e gli ultimi M caratteri della parte secret,
+ * separati da "…". Include il count totale dei caratteri secret.
+ */
+function buildApiKeyPreview(raw) {
+  const normalized = normalizeApiKey(raw);
+  if (!normalized) {
+    return { html: '<em style="opacity:.6">Nessuna API Key inserita</em>', cls: '' };
+  }
+  // Separa prefisso da secret
+  const secret = normalized.slice(APIKEY_PREFIX.length);
+  const head = 4, tail = 4;
+  let masked;
+  if (secret.length <= head + tail) {
+    masked = secret; // chiave troppo corta: niente masking
+  } else {
+    masked = `${secret.slice(0, head)}…${secret.slice(-tail)}`;
+  }
+  const userHadPrefix = /^apikey\s+/i.test((raw || '').trim());
+  const autoAdded = !userHadPrefix;
+  const prefixHtml = `<span class="pk-prefix">${APIKEY_PREFIX.trim()}</span>`;
+  const autoHint = autoAdded
+    ? ` <span class="pk-warn-ic" title="Prefisso aggiunto automaticamente">⚡ auto</span>`
+    : '';
+  const html =
+    `${prefixHtml} <code>${masked}</code> ` +
+    `<span style="opacity:.7">· ${secret.length} chars</span>${autoHint}`;
+  return { html, cls: autoAdded ? 'filled warn' : 'filled' };
+}
+
+function getChannel() {
   const el = document.querySelector('.ch-pill.active');
   return el ? el.dataset.ch : 'LINK';
 }
 
-/* ═══════════════════════════════════════════════════════
+/* ═══════════════════════════════════════════════════════════════════════
    DEFAULT JSON
-═══════════════════════════════════════════════════════ */
+═══════════════════════════════════════════════════════════════════════ */
 function makeDefault(ch) {
   ch = (ch || 'LINK').toUpperCase();
   const obj = {
-    shopLogin:        getShop() || 'GESPAY12345',
-    amount:           '516.49',
-    currency:         'EUR',
+    shopLogin:         getShop() || 'GESPAY12345',
+    amount:            '516.49',
+    currency:          'EUR',
     shopTransactionID: randomShopTxId(),
-    paymentChannel:   { channelType: [ch] },
-    responseURLs:     { buyerOK: '', buyerKO: '', serverNotificationURL: '' },
-    paymentType:      ['CREDITCARD', 'KLARNA', 'PAYPAL'],
-    OrderDetails:     {
+    paymentChannel:    { channelType: [ch] },
+    responseURLs:      { buyerOK: '', buyerKO: '', serverNotificationURL: '' },
+    paymentType:       ['CREDITCARD', 'KLARNA', 'PAYPAL'],
+    OrderDetails:      {
       BillingAddress:  { CountryCode: 'IT' },
       ProductDetails: [
         { Name: 'Articolo #1', UnitPrice: '500',   Quantity: '1' },
@@ -434,21 +535,31 @@ function makeDefault(ch) {
       ],
     },
   };
-  if (ch === 'EMAIL') obj.buyerEmail = DEFAULT_EMAIL;
+  if (ch === 'EMAIL') {
+    obj.buyerEmail = DEFAULT_EMAIL;
+    _autoInjectedBuyerEmail = true;
+  } else {
+    _autoInjectedBuyerEmail = false;
+  }
   return obj;
 }
 
-/* ═══════════════════════════════════════════════════════
+/* ═══════════════════════════════════════════════════════════════════════
    INIT
-═══════════════════════════════════════════════════════ */
+═══════════════════════════════════════════════════════════════════════ */
 function init() {
-  // Restore credentials from sessionStorage
-  ['pbl_shop','pbl_apikey'].forEach(k => {
-    const v = sessionStorage.getItem(k);
-    if (v) { k==='pbl_shop' ? ($('cred-shop').value=v) : ($('cred-apikey').value=v); }
-  });
+  // Ripristino credenziali da sessionStorage
+  const savedShop   = sessionStorage.getItem('pbl_shop');
+  const savedApiKey = sessionStorage.getItem('pbl_apikey');
+  if (savedShop)   $('cred-shop').value   = savedShop;
+  if (savedApiKey) $('cred-apikey').value = savedApiKey;
+
+  // Persist on blur (non ad ogni keystroke per evitare noise in sessionStorage)
   $('cred-shop').addEventListener('blur',   () => sessionStorage.setItem('pbl_shop',   $('cred-shop').value));
   $('cred-apikey').addEventListener('blur', () => sessionStorage.setItem('pbl_apikey', $('cred-apikey').value));
+
+  // Renderizza subito la preview se c'è già una chiave salvata
+  refreshApiKeyPreview();
 
   $('json-editor').value = JSON.stringify(makeDefault('LINK'), null, 2);
   syncChannelPills('LINK');
@@ -456,9 +567,9 @@ function init() {
   checkReturn();
 }
 
-/* ═══════════════════════════════════════════════════════
+/* ═══════════════════════════════════════════════════════════════════════
    RETURN CHECK (buyerOK / buyerKO)
-═══════════════════════════════════════════════════════ */
+═══════════════════════════════════════════════════════════════════════ */
 function checkReturn() {
   const p  = new URLSearchParams(window.location.search);
   const st = p.get('Status') || p.get('status');
@@ -482,9 +593,9 @@ function checkReturn() {
   $('rb-params').innerHTML = parts.join('');
 
   LOG.group(`Callback URL — ritorno da pagamento (${ok ? 'OK' : 'KO'})`, ok ? 'ok' : 'err');
-  LOG.kv('Status',       st || '—', ok ? 'ok' : 'err');
+  LOG.kv('Status',        st || '—', ok ? 'ok' : 'err');
   LOG.kv('shopLogin (a)', sl || '—');
-  LOG.kv('paymentID',    id || '—');
+  LOG.kv('paymentID',     id || '—');
   if (tk) LOG.kv('paymentToken', tk.slice(0,16) + '…');
   LOG.sep();
   LOG.line('→ Chiama payment/detail server-side con paymentToken per conferma definitiva.', 'warn');
@@ -493,9 +604,9 @@ function checkReturn() {
   window.history.replaceState({}, document.title, window.location.pathname);
 }
 
-/* ═══════════════════════════════════════════════════════
-   CREDENTIAL SYNC
-═══════════════════════════════════════════════════════ */
+/* ═══════════════════════════════════════════════════════════════════════
+   CREDENTIAL HANDLERS
+═══════════════════════════════════════════════════════════════════════ */
 function onCredShopChange() {
   if (_syncLock) return;
   _syncLock = true;
@@ -504,9 +615,36 @@ function onCredShopChange() {
     const p = JSON.parse($('json-editor').value);
     p.shopLogin = getShop();
     $('json-editor').value = JSON.stringify(p, null, 2);
-  } catch(e) {}
+  } catch(e) { /* JSON non parsabile: l'utente sta editando → skip */ }
   validate();
   _syncLock = false;
+}
+
+function onApiKeyInput() {
+  // Ogni keystroke aggiorna la preview mascherata
+  refreshApiKeyPreview();
+}
+
+function refreshApiKeyPreview() {
+  const raw = getApiKeyRaw();
+  const { html, cls } = buildApiKeyPreview(raw);
+  const el = $('apikey-preview');
+  el.className = 'apikey-preview ' + cls;
+  el.innerHTML = html;
+}
+
+function toggleApiKeyVisibility() {
+  const inp  = $('cred-apikey');
+  const icon = $('apikey-eye');
+  const showing = inp.type === 'text';
+  if (showing) {
+    inp.type = 'password';
+    icon.innerHTML = '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>';
+  } else {
+    inp.type = 'text';
+    // Icona "occhio barrato" quando è in chiaro
+    icon.innerHTML = '<path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A10.94 10.94 0 0 1 12 4c7 0 11 8 11 8a18.48 18.48 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/>';
+  }
 }
 
 function onEditorInput() {
@@ -514,20 +652,34 @@ function onEditorInput() {
   _syncLock = true;
   try {
     const p = JSON.parse($('json-editor').value);
+    // Sync shopLogin ← JSON
     if (p.shopLogin !== undefined) {
       $('cred-shop').value = p.shopLogin;
       sessionStorage.setItem('pbl_shop', p.shopLogin);
     }
+    // Sync channel pills ← JSON
     const ch = p?.paymentChannel?.channelType?.[0];
     if (ch) syncChannelPills(ch.toUpperCase());
-  } catch(e) {}
+
+    /*
+      Se l'utente ha scritto manualmente buyerEmail nel JSON,
+      smetti di considerarla "auto-iniettata": da qui in poi è una sua scelta.
+      Se invece l'ha cancellata a mano, resettiamo il flag.
+    */
+    if (p.buyerEmail === undefined) {
+      _autoInjectedBuyerEmail = false;
+    } else if (p.buyerEmail !== DEFAULT_EMAIL) {
+      // valore custom digitato dall'utente → non più "auto"
+      _autoInjectedBuyerEmail = false;
+    }
+  } catch(e) { /* JSON in editing: ignora */ }
   _syncLock = false;
   validate();
 }
 
-/* ═══════════════════════════════════════════════════════
+/* ═══════════════════════════════════════════════════════════════════════
    CHANNEL SWITCH
-═══════════════════════════════════════════════════════ */
+═══════════════════════════════════════════════════════════════════════ */
 function setChannel(el) {
   const ch = el.dataset.ch;
   syncChannelPills(ch);
@@ -536,19 +688,46 @@ function setChannel(el) {
   try   { parsed = JSON.parse($('json-editor').value); }
   catch { parsed = makeDefault(ch); }
 
-  parsed.paymentChannel            = parsed.paymentChannel || {};
+  parsed.paymentChannel             = parsed.paymentChannel || {};
   parsed.paymentChannel.channelType = [ch];
 
   if (ch === 'EMAIL') {
+    /*
+      Se non c'è buyerEmail la iniettiamo noi (flag = true).
+      Se è già presente: rispettiamo la scelta utente (flag = false).
+    */
     if (!parsed.buyerEmail) {
       parsed.buyerEmail = DEFAULT_EMAIL;
+      _autoInjectedBuyerEmail = true;
       LOG.group('Auto-inject buyerEmail (channelType=EMAIL)', 'info');
       LOG.kv('buyerEmail', DEFAULT_EMAIL, 'ok');
       LOG.line('Campo aggiunto automaticamente — non era presente.', 'info');
       LOG.end();
     } else {
+      _autoInjectedBuyerEmail = false;
       LOG.group('channelType=EMAIL — buyerEmail già presente', 'info');
       LOG.kv('buyerEmail (conservato)', parsed.buyerEmail, 'ok');
+      LOG.end();
+    }
+  } else {
+    /*
+      Fix richiesto: passando a LINK/QRCODE rimuoviamo buyerEmail,
+      ma solo se l'avevamo iniettata noi (principio "clean what you own").
+      Se l'utente l'ha scritta a mano in precedenza, la lasciamo stare
+      — il backend semplicemente la ignorerà per questi canali.
+    */
+    if (parsed.buyerEmail !== undefined && _autoInjectedBuyerEmail) {
+      const removed = parsed.buyerEmail;
+      delete parsed.buyerEmail;
+      _autoInjectedBuyerEmail = false;
+      LOG.group(`channelType=${ch} — rimossa buyerEmail auto-iniettata`, 'info');
+      LOG.kv('buyerEmail (rimossa)', removed);
+      LOG.line('Campo non rilevante per LINK/QRCODE — pulizia automatica.', 'info');
+      LOG.end();
+    } else if (parsed.buyerEmail !== undefined) {
+      LOG.group(`channelType=${ch} — buyerEmail custom conservata`, 'info');
+      LOG.kv('buyerEmail (utente)', parsed.buyerEmail);
+      LOG.line('Valore custom digitato manualmente → non viene rimosso.', 'muted');
       LOG.end();
     }
   }
@@ -561,9 +740,9 @@ function syncChannelPills(active) {
   document.querySelectorAll('.ch-pill').forEach(p => p.classList.toggle('active', p.dataset.ch === active));
 }
 
-/* ═══════════════════════════════════════════════════════
+/* ═══════════════════════════════════════════════════════════════════════
    VALIDATE JSON
-═══════════════════════════════════════════════════════ */
+═══════════════════════════════════════════════════════════════════════ */
 function validate() {
   const raw  = $('json-editor').value.trim();
   const icon = $('vb-icon'), msg = $('vb-msg');
@@ -585,7 +764,7 @@ function validate() {
     return false;
   }
 
-  // Amount consistency
+  // Consistency check: somma(ProductDetails) ≈ amount
   const ac = checkAmount(parsed);
   if (ac && !ac.ok) {
     setVb(icon, msg, 'warn', '!',
@@ -624,9 +803,9 @@ function checkAmount(parsed) {
   return { sum: r(sum), amount: r(amount), ok: Math.abs(sum - amount) < 0.01 };
 }
 
-/* ═══════════════════════════════════════════════════════
+/* ═══════════════════════════════════════════════════════════════════════
    EDITOR ACTIONS
-═══════════════════════════════════════════════════════ */
+═══════════════════════════════════════════════════════════════════════ */
 function doFormat() {
   try {
     const p = JSON.parse($('json-editor').value);
@@ -657,9 +836,9 @@ function doCopyEditor(btn) {
   });
 }
 
-/* ═══════════════════════════════════════════════════════
+/* ═══════════════════════════════════════════════════════════════════════
    SEND REQUEST
-═══════════════════════════════════════════════════════ */
+═══════════════════════════════════════════════════════════════════════ */
 async function doSend() {
   if (!validate()) {
     LOG.group('Invio bloccato — validation fallita', 'warn');
@@ -667,8 +846,10 @@ async function doSend() {
     LOG.end();
     return;
   }
-  const apiKey = getApiKey();
-  if (!apiKey) {
+
+  const rawKey  = getApiKeyRaw();
+  const authHdr = normalizeApiKey(rawKey);
+  if (!authHdr) {
     setVb($('vb-icon'), $('vb-msg'), 'warn', '!', '⚠ API Key mancante — inseriscila nel box Credenziali');
     LOG.group('Invio bloccato — API Key assente', 'warn');
     LOG.line('Inserisci la chiave nel box Credenziali sopra.', 'warn');
@@ -684,9 +865,9 @@ async function doSend() {
   // UI: loading
   const btn   = $('send-btn');
   const badge = $('status-badge');
-  btn.disabled    = true;
-  btn.innerHTML   = '<div class="spin-ico"></div> Invio in corso…';
-  badge.className  = 'status-badge sb-loading';
+  btn.disabled     = true;
+  btn.innerHTML    = '<div class="spin-ico"></div> Invio in corso…';
+  badge.className   = 'status-badge sb-loading';
   badge.textContent = 'Richiesta in corso…';
   $('link-box').classList.remove('visible');
   $('qr-box').classList.remove('visible');
@@ -695,31 +876,38 @@ async function doSend() {
   _currentQrB64 = null;
 
   // LOG outgoing
+  const userHadPrefix = /^apikey\s+/i.test(rawKey);
   LOG.group(`payment/create → ${ch} · txID: ${body.shopTransactionID}`, 'title');
-  LOG.kv('endpoint',         API_URL);
-  LOG.kv('shopLogin',        body.shopLogin    || '—');
-  LOG.kv('amount',           `${body.amount} ${body.currency || ''}`);
+  LOG.kv('endpoint',          API_URL);
+  LOG.kv('shopLogin',         body.shopLogin    || '—');
+  LOG.kv('amount',            `${body.amount} ${body.currency || ''}`);
   LOG.kv('shopTransactionID', body.shopTransactionID);
-  LOG.kv('channelType',      ch);
+  LOG.kv('channelType',       ch);
   if (ch === 'EMAIL') LOG.kv('buyerEmail', body.buyerEmail || '—', body.buyerEmail ? 'ok' : 'warn');
   const ac = checkAmount(body);
   if (ac) LOG.kv('importo check', ac.ok ? `✓ ${ac.sum} = ${ac.amount}` : `⚠ somma ${ac.sum} ≠ amount ${ac.amount}`, ac.ok ? 'ok' : 'warn');
   LOG.sep();
-  LOG.line(`Authorization: ${apiKey.slice(0,12)}…`, 'muted');
+  // Preview sicura dell'header: prefisso + inizio/fine del secret (niente chiave intera in console)
+  const secretPart = authHdr.slice(APIKEY_PREFIX.length);
+  const hdrPreview = secretPart.length > 8
+    ? `${APIKEY_PREFIX}${secretPart.slice(0,4)}…${secretPart.slice(-4)}`
+    : authHdr;
+  LOG.kv('Authorization', hdrPreview, 'ok');
+  if (!userHadPrefix) LOG.line('⚡ Prefisso "apikey " aggiunto automaticamente (non era presente nel campo).', 'warn');
   LOG.end();
 
   try {
     const res  = await fetch(API_URL, {
       method:  'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': apiKey },
+      headers: { 'Content-Type': 'application/json', 'Authorization': authHdr },
       body:    JSON.stringify(body),
     });
     let data;
     try { data = await res.json(); }
     catch { data = { error: { code: 'PARSE_ERR', description: 'Risposta non JSON' }, payload: null }; }
-    handleResponse(data, ch, body);
+    handleResponse(data, ch, body, { userHadPrefix });
   } catch(err) {
-    handleResponse({ error: { code: 'NETWORK', description: err.message }, payload: null }, ch, body);
+    handleResponse({ error: { code: 'NETWORK', description: err.message }, payload: null }, ch, body, { userHadPrefix });
   } finally {
     btn.disabled  = false;
     btn.innerHTML = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg> Invia Richiesta';
@@ -727,19 +915,36 @@ async function doSend() {
   }
 }
 
-/* ═══════════════════════════════════════════════════════
+/* ═══════════════════════════════════════════════════════════════════════
    HANDLE RESPONSE
-═══════════════════════════════════════════════════════ */
-function handleResponse(data, ch, requestBody) {
+═══════════════════════════════════════════════════════════════════════ */
+function handleResponse(data, ch, requestBody, ctx) {
   const badge   = $('status-badge');
   const dot     = $('resp-dot');
   const isOk    = data?.error?.code === '0';
   const payload = data?.payload;
+  const code    = data?.error?.code;
 
   // LOG response
-  LOG.group(`payment/create ← ${isOk ? 'OK' : 'ERRORE'} (code: ${data?.error?.code})`, isOk ? 'ok' : 'err');
-  LOG.kv('error.code',        data?.error?.code        || '—', isOk ? 'ok' : 'err');
+  LOG.group(`payment/create ← ${isOk ? 'OK' : 'ERRORE'} (code: ${code})`, isOk ? 'ok' : 'err');
+  LOG.kv('error.code',        code                      || '—', isOk ? 'ok' : 'err');
   LOG.kv('error.description', data?.error?.description || '—');
+
+  // Hint specifico per 1171: è quasi sempre un problema di formato header
+  if (String(code) === '1171') {
+    LOG.sep();
+    LOG.line('⚠ Error 1171 — "missing authentication header"', 'err');
+    LOG.line('Cause tipiche:', 'warn');
+    LOG.line('  1. L\'header Authorization non è stato inviato', 'warn');
+    LOG.line('  2. Il formato non è "apikey <UUID>" (con il prefisso letterale "apikey ")', 'warn');
+    LOG.line('  3. La chiave è associata a un altro ambiente (sandbox vs prod)', 'warn');
+    LOG.line('  4. shopLogin non corrisponde al merchant della chiave', 'warn');
+    if (!ctx?.userHadPrefix) {
+      LOG.line('→ Il prefisso "apikey " è stato aggiunto automaticamente in questa chiamata.', 'info');
+      LOG.line('→ Se persiste l\'errore, verifica che la chiave sia corretta per la sandbox.', 'info');
+    }
+  }
+
   if (payload) {
     LOG.sep();
     LOG.kv('paymentToken', payload.paymentToken || '—');
@@ -764,18 +969,27 @@ function handleResponse(data, ch, requestBody) {
 
   // Badge / dot
   if (isOk) {
-    badge.className  = 'status-badge sb-ok';
+    badge.className   = 'status-badge sb-ok';
     badge.textContent = '✓ Risposta OK';
-    dot.className    = 'box-dot green';
+    dot.className     = 'box-dot green';
   } else {
-    badge.className  = 'status-badge sb-err';
-    badge.textContent = '✗ Errore';
-    dot.className    = 'box-dot red';
+    badge.className   = 'status-badge sb-err';
+    // Messaggio badge più specifico per 1171
+    badge.textContent = String(code) === '1171' ? '✗ Auth header' : '✗ Errore';
+    dot.className     = 'box-dot red';
   }
 
-  // Raw response
-  $('resp-box').style.display   = '';
-  $('resp-pre').innerHTML       = hlJson(data);
+  // Raw response (sempre)
+  $('resp-box').style.display = '';
+  $('resp-pre').innerHTML     = hlJson(data);
+
+  // Banner in-page dedicato all'errore 1171 (non solo console)
+  if (String(code) === '1171') {
+    setVb(
+      $('vb-icon'), $('vb-msg'), 'err', '✗',
+      '✗ Error 1171 — missing authentication header.\nControlla che la API Key sia corretta e che il merchant/shopLogin corrisponda all\'ambiente sandbox. (Guarda la console per dettagli)'
+    );
+  }
 
   if (!isOk || !payload) return;
 
@@ -791,16 +1005,16 @@ function handleResponse(data, ch, requestBody) {
       showQrModal();
       return;
     }
-    // fallback: QR absent → show link if available
+    // fallback: QR assente → mostra link se disponibile
   }
 
-  // LINK / EMAIL branch (also fallback for QRCODE without qrCode in payload)
+  // LINK / EMAIL branch (e fallback per QRCODE senza qrCode nel payload)
   const href = payload.userRedirect?.href;
   if (href) {
     _currentHref = href;
-    $('link-url').textContent  = href;
-    $('link-lbl').textContent  = `Canale: ${ch} · paymentID: ${payload.paymentID}`;
-    $('link-meta').innerHTML   = makePills(payload, requestBody);
+    $('link-url').textContent = href;
+    $('link-lbl').textContent = `Canale: ${ch} · paymentID: ${payload.paymentID}`;
+    $('link-meta').innerHTML  = makePills(payload, requestBody);
     $('link-box').classList.add('visible');
   }
 }
@@ -813,21 +1027,21 @@ function makePills(payload, requestBody) {
   return pills.join('');
 }
 
-/* ═══════════════════════════════════════════════════════
+/* ═══════════════════════════════════════════════════════════════════════
    QR MODAL
-═══════════════════════════════════════════════════════ */
+═══════════════════════════════════════════════════════════════════════ */
 function showQrModal() {
   if (!_currentQrB64) return;
-  $('qr-img').src           = `data:image/png;base64,${_currentQrB64}`;
+  $('qr-img').src               = `data:image/png;base64,${_currentQrB64}`;
   $('qr-modal-meta').textContent = _currentQrMeta.paymentID ? `paymentID: ${_currentQrMeta.paymentID}` : '—';
   $('qr-overlay').classList.add('open');
 }
-function closeQrModal()         { $('qr-overlay').classList.remove('open'); }
-function onQrOverlayClick(e)    { if (e.target === $('qr-overlay')) closeQrModal(); }
+function closeQrModal()      { $('qr-overlay').classList.remove('open'); }
+function onQrOverlayClick(e) { if (e.target === $('qr-overlay')) closeQrModal(); }
 
-/* ═══════════════════════════════════════════════════════
+/* ═══════════════════════════════════════════════════════════════════════
    LINK ACTIONS
-═══════════════════════════════════════════════════════ */
+═══════════════════════════════════════════════════════════════════════ */
 function doOpenSame() {
   if (!_currentHref) return;
   LOG.group('Apertura link — stessa pagina', 'info');
@@ -850,9 +1064,9 @@ function doCopyLink(btn) {
   });
 }
 
-/* ═══════════════════════════════════════════════════════
+/* ═══════════════════════════════════════════════════════════════════════
    MISC
-═══════════════════════════════════════════════════════ */
+═══════════════════════════════════════════════════════════════════════ */
 function doCopyResp(btn) {
   const t = $('resp-pre').innerText || $('resp-pre').textContent;
   navigator.clipboard.writeText(t).then(() => {
@@ -864,7 +1078,7 @@ function doClear() {
   $('resp-box').style.display = 'none';
   $('link-box').classList.remove('visible');
   $('qr-box').classList.remove('visible');
-  $('status-badge').className  = 'status-badge sb-idle';
+  $('status-badge').className   = 'status-badge sb-idle';
   $('status-badge').textContent = 'In attesa';
   $('clear-btn').style.display  = 'none';
   _currentHref  = null;
@@ -884,9 +1098,9 @@ function hlJson(obj) {
   );
 }
 
-/* ═══════════════════════════════════════════════════════
+/* ═══════════════════════════════════════════════════════════════════════
    BOOT
-═══════════════════════════════════════════════════════ */
+═══════════════════════════════════════════════════════════════════════ */
 init();
 </script>
 </body>
